@@ -105,17 +105,16 @@ void hw_test_main(void) {
       int phase_index =
           PHASE_PERIOD - 1 - (now_ms / (SLOPE_PERIOD * 2) % PHASE_PERIOD);
       int t = now_ms % (SLOPE_PERIOD * 2);
+      if (t >= SLOPE_PERIOD) {
+        t = SLOPE_PERIOD * 2 - t;
+      }
+      uint32_t brightness = (uint32_t)t * RESO / SLOPE_PERIOD;
+      uint32_t pwm_level = (brightness * brightness) >> LED_PWM_PRECISION;
+      pwm_level = (pwm_level * brightness) >> LED_PWM_PRECISION;
 
       int x = x_value;
       for (int i = LED_NUM_PORTS - 1; i >= 0; i--) {
         bool on = (phase_index >= LED_NUM_PORTS) || (i == phase_index);
-
-        if (t >= SLOPE_PERIOD) {
-          t = SLOPE_PERIOD * 2 - t;
-        }
-        uint32_t brightness = (uint32_t)t * RESO / SLOPE_PERIOD;
-        uint32_t pwm_level = (brightness * brightness) >> LED_PWM_PRECISION;
-        pwm_level = (pwm_level * brightness) >> LED_PWM_PRECISION;
 
         pwm_set_gpio_level(LED_PORTS[i], on ? pwm_level : 0);
 
