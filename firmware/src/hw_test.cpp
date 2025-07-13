@@ -43,9 +43,7 @@ void hw_test_main(void) {
 
   {
     gpio_init(VOLUME_HIGH_PORT);
-    //gpio_set_dir(VOLUME_HIGH_PORT, GPIO_IN);
-    gpio_set_dir(VOLUME_HIGH_PORT, GPIO_OUT);
-    gpio_put(VOLUME_HIGH_PORT, false);
+    gpio_set_dir(VOLUME_HIGH_PORT, GPIO_IN);
     adc_select_input(VOLUME_ADC_CHANNEL);
     for (int i = 0; i < 8; i++) {
       uint16_t dummy = adc_read();
@@ -73,7 +71,8 @@ void hw_test_main(void) {
     pwm_set_gpio_level(FAN_PWM_PORT, 0);
   }
 
-  display.initBus();
+  display.resetI2cBus();
+
   display.init();
   display.setRotation(DISPLAY_ROTATION);
   display.setColorDepth(1);
@@ -261,7 +260,7 @@ void hw_test_main(void) {
       float raw = sum / NUM_SUM;
 
       float voltage = (raw * 3.3f) / (1 << 12);
-      voltage -= CURRENT_SENSOR_OFFSET_MV / 1000.0f;  // Adjust for offset
+      voltage -= CURRENT_SENSOR_OFFSET_MV / 1000.0f;
       float current = voltage / (0.1f * 11);
       display.setCursor(x_value, y);
       display.printf("%6.3f A", current);

@@ -1,8 +1,8 @@
 #pragma once
 
+#include <pico/stdlib.h>
 #include <stdint.h>
 
-// #define LGFX_USE_V1
 #include <LovyanGFX.hpp>
 
 #include "uv_irradiator/hw_config.hpp"
@@ -36,6 +36,56 @@ class LGFX_SSD1306 : public lgfx::LGFX_Device {
     }
 
     setPanel(&_panel_instance);
+  }
+
+  void resetI2cBus() {
+    constexpr int MAX_RETRIES = 3;
+    constexpr int MAX_SCL_PULSES = 16;
+    constexpr int SCL_PERIOD_US = 100;
+
+    // change I2C pins to GPIO mode
+    gpio_init(DISPLAY_I2C_SDA_PORT);
+    gpio_init(DISPLAY_I2C_SCL_PORT);
+    gpio_pull_up(DISPLAY_I2C_SDA_PORT);
+    gpio_pull_up(DISPLAY_I2C_SCL_PORT);
+    gpio_set_function(DISPLAY_I2C_SDA_PORT, GPIO_FUNC_SIO);
+    gpio_set_function(DISPLAY_I2C_SCL_PORT, GPIO_FUNC_SIO);
+    gpio_set_dir(DISPLAY_I2C_SDA_PORT, GPIO_IN);
+    gpio_set_dir(DISPLAY_I2C_SCL_PORT, GPIO_IN);
+    gpio_put(DISPLAY_I2C_SDA_PORT, 0);
+    gpio_put(DISPLAY_I2C_SCL_PORT, 0);
+
+    for (int i = 0; i < MAX_RETRIES; i++) {
+      // check SDA state
+      if (gpio_get(DISPLAY_I2C_SDA_PORT)) {
+        // SDA is high, no need to reset
+        break;
+      }
+
+      // send SCL pulses until SDA is high
+      gpio_set_dir(DISPLAY_I2C_SDA_PORT, GPIO_IN);
+      gpio_set_dir(DISPLAY_I2C_SCL_PORT, GPIO_OUT);
+      sleep_us(SCL_PERIOD_US);
+      for (int j = 0; j < MAX_SCL_PULSES; j++) {
+        gpio_set_dir(DISPLAY_I2C_SCL_PORT, GPIO_IN);
+        sleep_us(SCL_PERIOD_US / 2);
+        gpio_set_dir(DISPLAY_I2C_SCL_PORT, GPIO_OUT);
+        sleep_us(SCL_PERIOD_US / 2);
+        if (gpio_get(DISPLAY_I2C_SDA_PORT)) break;
+      }
+
+      // send stop condition
+      gpio_set_dir(DISPLAY_I2C_SDA_PORT, GPIO_OUT);
+      sleep_us(SCL_PERIOD_US);
+      gpio_set_dir(DISPLAY_I2C_SCL_PORT, GPIO_IN);
+      sleep_us(SCL_PERIOD_US);
+      gpio_set_dir(DISPLAY_I2C_SDA_PORT, GPIO_IN);
+      sleep_us(SCL_PERIOD_US);
+    }
+
+    // cleanup
+    gpio_set_function(DISPLAY_I2C_SDA_PORT, GPIO_FUNC_I2C);
+    gpio_set_function(DISPLAY_I2C_SCL_PORT, GPIO_FUNC_I2C);
   }
 };
 
