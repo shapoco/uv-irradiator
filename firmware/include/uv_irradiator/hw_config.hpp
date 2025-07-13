@@ -27,6 +27,7 @@ static constexpr int LED_PWM_PRECISION = 12;
 
 static constexpr int SWITCH_NUM_PORTS = 4;
 static constexpr int SWITCH_PORTS[] = {16, 17, 18, 21};
+static constexpr int SWITCH_NEGATIVE[] = {true, true, true, false};
 
 static constexpr int FAN_PWM_PORT = 3;
 static constexpr int FAN_PWM_FREQ_HZ = 25 * 1000;

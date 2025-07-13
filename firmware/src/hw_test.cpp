@@ -35,7 +35,11 @@ void hw_test_main(void) {
   for (int i = 0; i < SWITCH_NUM_PORTS; i++) {
     gpio_init(SWITCH_PORTS[i]);
     gpio_set_dir(SWITCH_PORTS[i], GPIO_IN);
-    gpio_pull_up(SWITCH_PORTS[i]);
+    if (SWITCH_NEGATIVE[i]) {
+      gpio_pull_up(SWITCH_PORTS[i]);
+    } else {
+      gpio_pull_down(SWITCH_PORTS[i]);
+    }
   }
 
   adc_init();
@@ -165,7 +169,7 @@ void hw_test_main(void) {
     {
       int x = x_value;
       for (int i = 0; i < SWITCH_NUM_PORTS; i++) {
-        bool on = !gpio_get(SWITCH_PORTS[i]);
+        bool on = gpio_get(SWITCH_PORTS[i]) ^ SWITCH_NEGATIVE[i];
         int r = line_height / 2 - 1;
         int cx = x + r;
         int cy = y + r;
