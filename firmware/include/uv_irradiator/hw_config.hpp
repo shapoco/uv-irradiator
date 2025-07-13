@@ -19,19 +19,22 @@ enum Color : uint16_t {
 };
 
 static constexpr int LED_NUM_PORTS = 6;
-static constexpr int LED_PORTS[] = {8, 9, 10, 11, 12, 13};
+static constexpr int LED_PORTS[] = {4, 5, 6, 7, 8, 9};
 static constexpr int LED_PWM_NUM_CHANNELS = 3;
-static constexpr int LED_PWM_CHANNELS[] = {4, 5, 6};
+static constexpr int LED_PWM_CHANNELS[] = {2, 3, 4};
 static constexpr int LED_PWM_FREQ_HZ = 10 * 1000;
 static constexpr int LED_PWM_PRECISION = 12;
 
 static constexpr int SWITCH_NUM_PORTS = 4;
 static constexpr int SWITCH_PORTS[] = {16, 17, 18, 21};
 
-static constexpr int FAN_PWM_PORT = 22;
+static constexpr int FAN_PWM_PORT = 3;
 static constexpr int FAN_PWM_FREQ_HZ = 25 * 1000;
 static constexpr int FAN_PWM_PRECISION = 8;
 static constexpr int FAN_MIN_SPEED = (1ul << FAN_PWM_PRECISION) / 4;
+
+static constexpr int VOLUME_HIGH_PORT = 22;
+static constexpr int CURRENT_SENSOR_OFFSET_MV = 17;
 
 static constexpr int VOLUME_ADC_CHANNEL = 0;
 static constexpr int TEMPERATURE_ADC_CHANNEL = 1;

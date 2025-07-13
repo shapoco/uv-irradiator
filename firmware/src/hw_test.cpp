@@ -14,6 +14,8 @@ namespace uv_irradiator {
 LGFX_SSD1306 display;
 
 void hw_test_main(void) {
+  float adc_offset = 0;
+
   for (int i = 0; i < LED_PWM_NUM_CHANNELS; i++) {
     constexpr uint32_t RESO = (1ul << LED_PWM_PRECISION);
     constexpr float DIV = SYS_CLK_FREQ_KHZ * 1000.0f / LED_PWM_FREQ_HZ / RESO;
@@ -40,6 +42,25 @@ void hw_test_main(void) {
   adc_gpio_init(TEMPERATURE_ADC_CHANNEL);
 
   {
+    gpio_init(VOLUME_HIGH_PORT);
+    //gpio_set_dir(VOLUME_HIGH_PORT, GPIO_IN);
+    gpio_set_dir(VOLUME_HIGH_PORT, GPIO_OUT);
+    gpio_put(VOLUME_HIGH_PORT, false);
+    adc_select_input(VOLUME_ADC_CHANNEL);
+    for (int i = 0; i < 8; i++) {
+      uint16_t dummy = adc_read();
+    }
+    uint32_t sum = 0;
+    constexpr int NUM_SUM = 64;
+    for (int i = 0; i < NUM_SUM; i++) {
+      sum += adc_read();
+    }
+    adc_offset = (float)sum / NUM_SUM;
+    gpio_set_dir(VOLUME_HIGH_PORT, GPIO_OUT);
+    gpio_put(VOLUME_HIGH_PORT, true);
+  }
+
+  {
     constexpr uint32_t RESO = (1ul << FAN_PWM_PRECISION);
     constexpr float DIV = SYS_CLK_FREQ_KHZ * 1000.0f / FAN_PWM_FREQ_HZ / RESO;
     pwm_config pwm_cfg = pwm_get_default_config();
@@ -52,6 +73,7 @@ void hw_test_main(void) {
     pwm_set_gpio_level(FAN_PWM_PORT, 0);
   }
 
+  display.initBus();
   display.init();
   display.setRotation(DISPLAY_ROTATION);
   display.setColorDepth(1);
@@ -59,12 +81,16 @@ void hw_test_main(void) {
 
   int text_size = 1;
   int x_value = 56;
-  int line_height = text_size * 8 + 2;
+  int line_height = text_size * 8 + 1;
 
   {
     display.setTextColor(Color::WHITE, Color::BLACK);
     display.setTextSize(text_size);
     int y = 0;
+
+    display.setCursor(0, y);
+    display.print("ADC OFST");
+    y += line_height;
 
     display.setCursor(0, y);
     display.print("LEDs");
@@ -97,6 +123,14 @@ void hw_test_main(void) {
     display.setTextColor(Color::WHITE, Color::BLACK);
     display.setTextSize(text_size);
     int y = 0;
+
+    {
+      float offset_mv = adc_offset * 3300.0f / (1 << 12);
+      display.setCursor(x_value, y);
+      display.printf("%3.1f (%3.1f mV)", adc_offset, offset_mv);
+      y += line_height;
+    }
+
     {
       constexpr int SLOPE_PERIOD = 1000;
       constexpr int PHASE_PERIOD = LED_NUM_PORTS + 2;
@@ -118,7 +152,7 @@ void hw_test_main(void) {
 
         pwm_set_gpio_level(LED_PORTS[i], on ? pwm_level : 0);
 
-        int r = text_size * 4;
+        int r = line_height / 2 - 1;
         int cx = x + r;
         int cy = y + r;
         display.drawEllipse(cx, cy, r, r, Color::WHITE);
@@ -126,14 +160,14 @@ void hw_test_main(void) {
                             on ? Color::WHITE : Color::BLACK);
         x += r * 2 + 2;
       }
+      y += line_height;
     }
-    y += line_height;
 
     {
       int x = x_value;
       for (int i = 0; i < SWITCH_NUM_PORTS; i++) {
         bool on = !gpio_get(SWITCH_PORTS[i]);
-        int r = text_size * 4;
+        int r = line_height / 2 - 1;
         int cx = x + r;
         int cy = y + r;
         display.drawEllipse(cx, cy, r, r, Color::WHITE);
@@ -141,34 +175,34 @@ void hw_test_main(void) {
                             on ? Color::WHITE : Color::BLACK);
         x += r * 2 + 2;
       }
+      y += line_height;
     }
-    y += line_height;
 
     {
       adc_select_input(VOLUME_ADC_CHANNEL);
-      uint16_t raw = adc_read();
+      float raw = adc_read() - adc_offset;
       int w = DISPLAY_WIDTH - x_value;
       int h = text_size * 8;
       int x_white = x_value + 1;
-      int w_white = (uint32_t)raw * (w - 2) / (1 << 12);
+      int w_white = raw * (w - 2) / (1 << 12);
       int x_black = x_white + w_white;
       int w_black = (w - 2) - w_white;
       display.drawRect(x_value, y, w, h, Color::WHITE);
       display.fillRect(x_white, y + 1, w_white, h - 2, Color::WHITE);
       display.fillRect(x_black, y + 1, w_black, h - 2, Color::BLACK);
+      y += line_height;
     }
-    y += line_height;
 
     {
       adc_select_input(TEMPERATURE_ADC_CHANNEL);
-      uint16_t raw = adc_read();
+      float raw = adc_read() - adc_offset;
 
       constexpr int NUM_LOG = 64;
-      static uint16_t log[NUM_LOG];
+      static float log[NUM_LOG];
       static int log_index = 0;
       log[log_index] = raw;
       log_index = (log_index + 1) % NUM_LOG;
-      uint32_t sum = 0;
+      float sum = 0;
       for (int i = 0; i < NUM_LOG; i++) {
         sum += log[i];
       }
@@ -178,8 +212,8 @@ void hw_test_main(void) {
       float temperature = (voltage - 0.424f) / 0.00625f;
       display.setCursor(x_value, y);
       display.printf("%6.2f degC", temperature);
+      y += line_height;
     }
-    y += line_height;
 
     {
       constexpr uint32_t RESO = (1ul << FAN_PWM_PRECISION);
@@ -213,26 +247,26 @@ void hw_test_main(void) {
       display.drawRect(x_value, y, w, h, Color::WHITE);
       display.fillRect(x_white, y + 1, w_white, h - 2, Color::WHITE);
       display.fillRect(x_black, y + 1, w_black, h - 2, Color::BLACK);
+      y += line_height;
     }
-    y += line_height;
 
     {
       adc_select_input(CURRENT_SENSOR_ADC_CHANNEL);
 
       constexpr int NUM_SUM = 64;
-      uint32_t sum = 0;
+      float sum = 0;
       for (int i = 0; i < NUM_SUM; i++) {
-        sum += adc_read();
+        sum += adc_read() - adc_offset;
       }
-      uint16_t raw = sum / NUM_SUM;
+      float raw = sum / NUM_SUM;
 
       float voltage = (raw * 3.3f) / (1 << 12);
-      // voltage = (voltage - (2.83f / 2)) * 2;
-      float current = voltage / (0.1f * 11) - 0.02f;
+      voltage -= CURRENT_SENSOR_OFFSET_MV / 1000.0f;  // Adjust for offset
+      float current = voltage / (0.1f * 11);
       display.setCursor(x_value, y);
-      display.printf("%6.2f A", current);
+      display.printf("%6.3f A", current);
+      y += line_height;
     }
-    y += line_height;
 
     display.display();
     sleep_ms(10);
