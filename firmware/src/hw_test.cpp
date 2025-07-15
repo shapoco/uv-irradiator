@@ -13,25 +13,46 @@ namespace uv_irradiator {
 
 LGFX_SSD1306 display;
 
-void hw_test_main(void) {
-  float adc_offset = 0;
+static float adc_read_average(int channel, int num_samples) {
+  adc_select_input(channel);
+  uint32_t sum = 0;
+  for (int i = 0; i < num_samples; i++) {
+    sum += adc_read();
+  }
+  return (float)sum / num_samples;
+}
 
-  for (int i = 0; i < LED_PWM_NUM_CHANNELS; i++) {
-    constexpr uint32_t RESO = (1ul << LED_PWM_PRECISION);
-    constexpr float DIV = SYS_CLK_FREQ_KHZ * 1000.0f / LED_PWM_FREQ_HZ / RESO;
+void hw_test_main(void) {
+  float adc_offset_lsbs = 0;
+  float amp_offset_volt = 0;
+
+  // 紫外線 LED ポート初期化
+  for (int i = 0; i < UVLED_PWM_NUM_CHANNELS; i++) {
+    constexpr uint32_t RESO = (1ul << UVLED_PWM_PRECISION);
+    constexpr float DIV = SYS_CLK_FREQ_KHZ * 1000.0f / UVLED_PWM_FREQ_HZ / RESO;
     pwm_config pwm_cfg = pwm_get_default_config();
     pwm_config_set_clkdiv(&pwm_cfg, DIV);
     pwm_config_set_wrap(&pwm_cfg, RESO - 1);
-    pwm_init(LED_PWM_CHANNELS[i], &pwm_cfg, true);
+    pwm_init(UVLED_PWM_CHANNELS[i], &pwm_cfg, true);
   }
 
-  for (int i = 0; i < LED_NUM_PORTS; i++) {
-    gpio_init(LED_PORTS[i]);
-    gpio_set_dir(LED_PORTS[i], GPIO_OUT);
-    gpio_set_function(LED_PORTS[i], GPIO_FUNC_PWM);
-    pwm_set_gpio_level(LED_PORTS[i], 0);
+  // UV LED ポートの初期化
+  for (int i = 0; i < UVLED_NUM_PORTS; i++) {
+    gpio_init(UVLED_PORTS[i]);
+    gpio_set_dir(UVLED_PORTS[i], GPIO_OUT);
+    gpio_set_function(UVLED_PORTS[i], GPIO_FUNC_PWM);
+    pwm_set_gpio_level(UVLED_PORTS[i], 0);
   }
 
+  // インジケータ初期化
+  gpio_init(FAULT_LED_PORT);
+  gpio_init(UNLOCK_LED_PORT);
+  gpio_set_dir(FAULT_LED_PORT, GPIO_OUT);
+  gpio_set_dir(UNLOCK_LED_PORT, GPIO_OUT);
+  gpio_put(FAULT_LED_PORT, true);
+  gpio_put(UNLOCK_LED_PORT, true);
+
+  // スイッチ類の初期化
   for (int i = 0; i < SWITCH_NUM_PORTS; i++) {
     gpio_init(SWITCH_PORTS[i]);
     gpio_set_dir(SWITCH_PORTS[i], GPIO_IN);
@@ -42,24 +63,38 @@ void hw_test_main(void) {
     }
   }
 
-  adc_init();
-  adc_gpio_init(TEMPERATURE_ADC_CHANNEL);
-
+  // ADC初期化
+  // センサ類のポートを使ってアナログ系の特性を取得しておく
   {
-    gpio_init(VOLUME_HIGH_PORT);
-    gpio_set_dir(VOLUME_HIGH_PORT, GPIO_IN);
-    adc_select_input(VOLUME_ADC_CHANNEL);
-    for (int i = 0; i < 8; i++) {
-      uint16_t dummy = adc_read();
-    }
-    uint32_t sum = 0;
-    constexpr int NUM_SUM = 64;
-    for (int i = 0; i < NUM_SUM; i++) {
-      sum += adc_read();
-    }
-    adc_offset = (float)sum / NUM_SUM;
-    gpio_set_dir(VOLUME_HIGH_PORT, GPIO_OUT);
-    gpio_put(VOLUME_HIGH_PORT, true);
+    adc_init();
+
+    // ボリュームと温度計の電源を切る
+    gpio_init(SENSOR_ENA_PORT);
+    gpio_set_dir(SENSOR_ENA_PORT, GPIO_IN);
+    sleep_ms(100);
+
+    // 温度センサ端子の電荷を抜く (一応)
+    gpio_put(TEMPERATURE_PORT, false);
+    gpio_set_dir(TEMPERATURE_PORT, GPIO_OUT);
+    sleep_ms(1);
+    gpio_set_dir(TEMPERATURE_PORT, GPIO_IN);
+    sleep_ms(100);
+
+    adc_gpio_init(VOLUME_PORT);
+    adc_gpio_init(CURRENT_PORT);
+    adc_gpio_init(TEMPERATURE_PORT);
+
+    // ADC オフセット電圧測定
+    adc_offset_lsbs = adc_read_average(TEMPERATURE_ADC_CHANNEL, 64);
+
+    // オペアンプ入力オフセット測定
+    amp_offset_volt =
+        (adc_read_average(VOLUME_ADC_CHANNEL, 64) - adc_offset_lsbs) *
+        (3.3f / (1 << 12));
+
+    // ボリュームと温度計の電源投入
+    gpio_set_dir(SENSOR_ENA_PORT, GPIO_OUT);
+    gpio_put(SENSOR_ENA_PORT, true);
   }
 
   {
@@ -83,7 +118,7 @@ void hw_test_main(void) {
   display.clear();
 
   int text_size = 1;
-  int x_value = 56;
+  int x_value = 32;
   int line_height = text_size * 8 + 1;
 
   {
@@ -92,31 +127,31 @@ void hw_test_main(void) {
     int y = 0;
 
     display.setCursor(0, y);
-    display.print("ADC OFST");
+    display.print("OFST");
     y += line_height;
 
     display.setCursor(0, y);
-    display.print("LEDs");
+    display.print("LED");
     y += line_height;
 
     display.setCursor(0, y);
-    display.print("SWITCHes");
+    display.print("SW");
     y += line_height;
 
     display.setCursor(0, y);
-    display.print("VOLUME");
+    display.print("VOL");
     y += line_height;
 
     display.setCursor(0, y);
-    display.print("TEMP.");
+    display.print("TEMP");
     y += line_height;
 
     display.setCursor(0, y);
-    display.print("FAN SPD.");
+    display.print("FAN");
     y += line_height;
 
     display.setCursor(0, y);
-    display.print("CURRENT");
+    display.print("CRNT");
     y += line_height;
   }
 
@@ -128,16 +163,16 @@ void hw_test_main(void) {
     int y = 0;
 
     {
-      float offset_mv = adc_offset * 3300.0f / (1 << 12);
+      float adc_offset_mv = adc_offset_lsbs * 3300.0f / (1 << 12);
       display.setCursor(x_value, y);
-      display.printf("%3.1f (%3.1f mV)", adc_offset, offset_mv);
+      display.printf("%4.2fmV, %4.2fmV", adc_offset_mv, amp_offset_volt * 1000);
       y += line_height;
     }
 
     {
       constexpr int SLOPE_PERIOD = 1000;
-      constexpr int PHASE_PERIOD = LED_NUM_PORTS + 2;
-      constexpr uint32_t RESO = (1ul << LED_PWM_PRECISION);
+      constexpr int PHASE_PERIOD = UVLED_NUM_PORTS + 2;
+      constexpr uint32_t RESO = (1ul << UVLED_PWM_PRECISION);
 
       int phase_index =
           PHASE_PERIOD - 1 - (now_ms / (SLOPE_PERIOD * 2) % PHASE_PERIOD);
@@ -146,14 +181,14 @@ void hw_test_main(void) {
         t = SLOPE_PERIOD * 2 - t;
       }
       uint32_t brightness = (uint32_t)t * RESO / SLOPE_PERIOD;
-      uint32_t pwm_level = (brightness * brightness) >> LED_PWM_PRECISION;
-      pwm_level = (pwm_level * brightness) >> LED_PWM_PRECISION;
+      uint32_t pwm_level = (brightness * brightness) >> UVLED_PWM_PRECISION;
+      pwm_level = (pwm_level * brightness) >> UVLED_PWM_PRECISION;
 
       int x = x_value;
-      for (int i = LED_NUM_PORTS - 1; i >= 0; i--) {
-        bool on = (phase_index >= LED_NUM_PORTS) || (i == phase_index);
+      for (int i = UVLED_NUM_PORTS - 1; i >= 0; i--) {
+        bool on = (phase_index >= UVLED_NUM_PORTS) || (i == phase_index);
 
-        pwm_set_gpio_level(LED_PORTS[i], on ? pwm_level : 0);
+        pwm_set_gpio_level(UVLED_PORTS[i], on ? pwm_level : 0);
 
         int r = line_height / 2 - 1;
         int cx = x + r;
@@ -182,8 +217,8 @@ void hw_test_main(void) {
     }
 
     {
-      adc_select_input(VOLUME_ADC_CHANNEL);
-      float raw = adc_read() - adc_offset;
+      float raw = adc_read_average(VOLUME_ADC_CHANNEL, 1) - adc_offset_lsbs;
+
       int w = DISPLAY_WIDTH - x_value;
       int h = text_size * 8;
       int x_white = x_value + 1;
@@ -197,9 +232,10 @@ void hw_test_main(void) {
     }
 
     {
-      adc_select_input(TEMPERATURE_ADC_CHANNEL);
-      float raw = adc_read() - adc_offset;
+      float raw =
+          adc_read_average(TEMPERATURE_ADC_CHANNEL, 16) - adc_offset_lsbs;
 
+#if false
       constexpr int NUM_LOG = 64;
       static float log[NUM_LOG];
       static int log_index = 0;
@@ -210,6 +246,7 @@ void hw_test_main(void) {
         sum += log[i];
       }
       raw = sum / NUM_LOG;
+#endif
 
       float voltage = (raw * 3.3f) / (1 << 12);
       float temperature = (voltage - 0.424f) / 0.00625f;
@@ -254,18 +291,15 @@ void hw_test_main(void) {
     }
 
     {
-      adc_select_input(CURRENT_SENSOR_ADC_CHANNEL);
+      constexpr float AMP_RH = 100 * 1000;
+      constexpr float AMP_RL = 10 * 1000;
+      constexpr float AMP_GAIN = (AMP_RH + AMP_RL) / AMP_RL;
+      constexpr float R_SHUNT = 0.1f;
 
-      constexpr int NUM_SUM = 64;
-      float sum = 0;
-      for (int i = 0; i < NUM_SUM; i++) {
-        sum += adc_read() - adc_offset;
-      }
-      float raw = sum / NUM_SUM;
-
-      float voltage = (raw * 3.3f) / (1 << 12);
-      voltage -= CURRENT_SENSOR_OFFSET_MV / 1000.0f;
-      float current = voltage / (0.1f * 11);
+      float raw =
+          adc_read_average(CURRENT_SENSOR_ADC_CHANNEL, 16) - adc_offset_lsbs;
+      float voltage = (raw * 3.3f) / (1 << 12) - amp_offset_volt;
+      float current = voltage / (R_SHUNT * AMP_GAIN);
       display.setCursor(x_value, y);
       display.printf("%6.3f A", current);
       y += line_height;
