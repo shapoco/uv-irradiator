@@ -29,8 +29,8 @@ static constexpr int SWITCH_NUM_PORTS = 4;
 static constexpr int SWITCH_PORTS[] = {18, 19, 20, 21};
 static constexpr int SWITCH_NEGATIVE[] = {true, true, true, false};
 
-static constexpr int FAULT_LED_PORT = 2;
-static constexpr int UNLOCK_LED_PORT = 3;
+static constexpr int UNLOCK_LED_PORT = 2;
+static constexpr int FAULT_LED_PORT = 3;
 
 static constexpr int FAN_PWM_PORT = 10;
 static constexpr int FAN_PWM_FREQ_HZ = 25 * 1000;

@@ -158,6 +158,12 @@ void hw_test_main(void) {
   while (true) {
     uint32_t now_ms = to_ms_since_boot(get_absolute_time());
 
+    {
+      int t = now_ms / 1024;
+      gpio_put(UNLOCK_LED_PORT, !!(t & 1));
+      gpio_put(FAULT_LED_PORT, !!(t & 2));
+    }
+
     display.setTextColor(Color::WHITE, Color::BLACK);
     display.setTextSize(text_size);
     int y = 0;
