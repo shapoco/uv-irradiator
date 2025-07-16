@@ -2,7 +2,8 @@ import cadquery as cq
 import math
 
 MIL100 = 2.54
-GENERIC_GAP = 0.3
+GENERIC_GAP = 0.5
+NARROW_GAP = 0.2
 GENERIC_CHAMFER = 0.5
 
 T_BOARD = 1
@@ -27,7 +28,7 @@ class SwitchKey:
     def modify_panel(self, panel, offset):
         cutter = (
             cq.Workplane("XY")
-            .box(self.w + GENERIC_GAP * 2, self.h + GENERIC_GAP * 2, 50, centered=(True, True, False))
+            .box(self.w + GENERIC_GAP, self.h + GENERIC_GAP, 50, centered=(True, True, False))
             .edges("|Z")
             .fillet(GENERIC_CHAMFER)
             .translate((self.sw.x, self.sw.y, 0))
@@ -49,7 +50,7 @@ class Indicator():
     WALL_THICKNESS = 0.5
     PANEL_FILLET = 1
     PANEL_CHAMFER = 0.5
-    PANEL_NOTCH = 0.25
+    PANEL_NOTCH = 0.3
     WALL_Z_MARGIN = 1
     
     
@@ -100,7 +101,7 @@ class Indicator():
             .extrude(Indicator.T_TRANSPARENT)
             .faces(">Z")
             .workplane(origin=(0,0,0))
-            .text(self.text, 4.5, -Indicator.ENGRAVE_DEPTH, kind="bold" , halign="center", valign="center")
+            .text(self.text, 4, -Indicator.ENGRAVE_DEPTH, kind="bold" , halign="center", valign="center")
         )
         
         return solid
@@ -155,7 +156,7 @@ class MainBoard:
     H = 18 * MIL100
     
     T_FRONT = 14
-    T_BACK = 2
+    T_BACK = 3
     
     CN1 = SidePinHeader(2, 8, 2 * MIL100)
     CN2 = SidePinHeader(1, 2, 11 * MIL100)
@@ -171,8 +172,9 @@ class Volume:
     PIN_RADIUS = 16
     
     SHAFT_HOLE_DIAMETER = 7
-    LOCK_HOLE_DIAMETER = 2.8
-    LOCK_HOLE_POS_RADIUS = 11 - SHAFT_HOLE_DIAMETER / 2
+    LOCK_HOLE_W = 1.5
+    LOCK_HOLE_H = 3
+    LOCK_HOLE_X_OFFSET = 7.8
     
     def __init__(self, x, y, angle):
         self.x = x
@@ -192,8 +194,10 @@ class Volume:
         )
         cutter = cutter.union(
             cq.Workplane("XY")
-            .cylinder(100, (Volume.LOCK_HOLE_DIAMETER + GENERIC_GAP) / 2)
-            .translate((-Volume.LOCK_HOLE_POS_RADIUS, 0, 0))
+            .box(Volume.LOCK_HOLE_W + GENERIC_GAP, Volume.LOCK_HOLE_H + GENERIC_GAP, 100)
+            .edges("|Z")
+            .fillet(0.1)
+            .translate((-Volume.LOCK_HOLE_X_OFFSET, 0, 0))
         )
         cutter = (
             cutter
@@ -214,7 +218,7 @@ class MJ_10A:
     def __init__(self, offset=(0, 0, 0)):
         self.hole_cutter = (
             cq.Workplane("XY")
-            .cylinder(MJ_10A.CUTTER_LENGTH, (MJ_10A.SCREW_DIAMETER+GENERIC_GAP) / 2, centered=(True, True, False))
+            .cylinder(MJ_10A.CUTTER_LENGTH, (MJ_10A.SCREW_DIAMETER + GENERIC_GAP) / 2, centered=(True, True, False))
             .translate((0, 0, -MJ_10A.CUTTER_LENGTH))
             .translate(offset)
         )
@@ -250,29 +254,37 @@ class IntfBoard:
 
     OLED = SSD1906(25.7, 15.9)
 
+    H_INCLUDE_OLED = OLED.y + OLED.H
+
+
 PANEL_X_MARGIN = 1
 PANEL_Y_MARGIN = 1
 INTF_BOARD_FRONT_GAP = SSD1906.T_TOTAL + GENERIC_GAP
 INTF_BOARD_2D_OFFSET = (PANEL_X_MARGIN, PANEL_Y_MARGIN + 1.5, 0)
 INTF_BOARD_3D_OFFSET = (INTF_BOARD_2D_OFFSET[0], INTF_BOARD_2D_OFFSET[1], -INTF_BOARD_FRONT_GAP - T_BOARD)
 MAIN_BOARD_FRONT_GAP = INTF_BOARD_FRONT_GAP + T_BOARD  + MainBoard.T_FRONT
-MAIN_BOARD_OFFSET = (PANEL_X_MARGIN, PANEL_Y_MARGIN, -MAIN_BOARD_FRONT_GAP - T_BOARD)
-INNER_HEIGHT = int(math.ceil(-MAIN_BOARD_OFFSET[2] + MainBoard.T_BACK))
+MAIN_BOARD_2D_OFFSET = (PANEL_X_MARGIN, PANEL_Y_MARGIN, 0)
+MAIN_BOARD_3D_OFFSET = (MAIN_BOARD_2D_OFFSET[0], MAIN_BOARD_2D_OFFSET[1], -MAIN_BOARD_FRONT_GAP - T_BOARD)
+INNER_HEIGHT = int(math.ceil(-MAIN_BOARD_3D_OFFSET[2] + MainBoard.T_BACK))
 
 VOL_MARGIN = 2
 
 BOARD_LOCK_W = 5
 
+# パネル厚み
+T_PANEL = 2
+
+# DCジャックの取り付け部の寸法
+DC_JACK_MOUNT_W = 18 + T_PANEL * 2
+DC_JACK_MOUNT_H = 18
+
 H_FLANGE = 4
 T_FLANGE = 1
 
-# パネル厚み
-T_PANEL = 2
-    
 # パネルサイズ算出
-PANEL_W = int(math.ceil(MAIN_BOARD_OFFSET[0] + MainBoard.W + VOL_MARGIN + Volume.BODY_DIAMETER + VOL_MARGIN))
-PANEL_H = int(math.ceil(MAIN_BOARD_OFFSET[1] + MainBoard.H + PANEL_Y_MARGIN))
-#PANEL_H = int(math.ceil(INTF_BOARD_2D_OFFSET[1] + IntfBoard.OLED.y + SSD1906.H + PANEL_Y_MARGIN))
+PANEL_W = int(math.ceil(MAIN_BOARD_2D_OFFSET[0] + MainBoard.W + DC_JACK_MOUNT_W + PANEL_X_MARGIN))
+PANEL_H = int(math.ceil(MAIN_BOARD_3D_OFFSET[1] + MainBoard.H + PANEL_Y_MARGIN))
+#PANEL_H = int(math.ceil(INTF_BOARD_2D_OFFSET[1] + IntfBoard.H_INCLUDE_OLED + PANEL_Y_MARGIN))
 
 print(f"INTF_BOARD_FRONT_GAP: {INTF_BOARD_FRONT_GAP}")
 print(f"MAIN_BOARD_FRONT_GAP: {MAIN_BOARD_FRONT_GAP}")
@@ -299,26 +311,27 @@ CASE_LOCK_POINTS = [
 def make_board_supporter(w,h , tall):
     return (
         cq.Workplane("XY")
-        .box(w, h, tall, centered=False)
-        .edges(">Z")
-        .chamfer(0.25)
+        .box(w, h, tall - NARROW_GAP, centered=False)
     )
 
 # 基板をロックする部分の生成
 def make_board_lock(tall):
-    T = 0.75
+    T = 1
+    CHAMFER = 0.75
     LOCK_SIZE = 0.75
     MAX_TALL = 10
     
-    lock_tall = min(MAX_TALL, tall)
+    lock_tall = min(MAX_TALL, tall) + NARROW_GAP
     verts = [
-        (0, 0),
-        (0, lock_tall ),
+        (CHAMFER, 0),
+        (0, CHAMFER),
+        (0, lock_tall),
         (LOCK_SIZE, lock_tall ),
         (LOCK_SIZE, lock_tall+0.5),
         (0, lock_tall+0.5 + LOCK_SIZE),
         (-T, lock_tall+0.5 + LOCK_SIZE),
-        (-T, 0),
+        (-T, CHAMFER),
+        (-T-CHAMFER, 0),
     ]
     solid = (
         cq.Workplane("YZ")
@@ -348,13 +361,11 @@ class FrontPanel:
 
     # ボリューム
     VR1 = Volume(
-        INTF_BOARD_3D_OFFSET[0] + IntfBoard.W + VOL_MARGIN + Volume.BODY_DIAMETER / 2,
+        PANEL_W - Volume.BODY_DIAMETER / 2 - VOL_MARGIN,
         VOL_MARGIN + Volume.BODY_DIAMETER / 2,
         180
     )
 
-    DC_JACK_MOUNT_W = 18 + T_PANEL * 2
-    DC_JACK_MOUNT_H = 18
     DC_JACK_HOLE_OFFSET = (PANEL_W - DC_JACK_MOUNT_W/2, PANEL_H -2, -DC_JACK_MOUNT_H/2)
     DC_JACK = (
         MJ_10A().rotate((0,0,0),(1,0,0),-90)
@@ -390,7 +401,12 @@ class FrontPanel:
     )))
     solid = solid.union(support.translate((IntfBoard.W - support_w, IntfBoard.SW3.y, 0)))
     solid = solid.union(support.translate((
-        IntfBoard.OLED.x+ SSD1906.W/2 - support_w/2, 
+        IntfBoard.OLED.x+ SSD1906.W*1/5 - support_w/2, 
+        IntfBoard.OLED.y + SSD1906.H - support_h, 
+        SSD1906.T_BOARD,
+    )))
+    solid = solid.union(support.translate((
+        IntfBoard.OLED.x+ SSD1906.W*4/5 - support_w/2, 
         IntfBoard.OLED.y + SSD1906.H - support_h, 
         SSD1906.T_BOARD,
     )))
@@ -400,7 +416,16 @@ class FrontPanel:
         make_board_lock(lock_tall)
         .mirror("XY")
     )
-    locks = lock_template.translate(((IntfBoard.W - BOARD_LOCK_W ) /2,0,0))
+    locks = lock_template.translate((
+        IntfBoard.W *3 /4- BOARD_LOCK_W/2,
+        0,
+        0,
+    ))
+    locks = locks.union(lock_template.translate((
+        IntfBoard.W*1/4 - BOARD_LOCK_W  /2,
+        0,
+        0,
+    )))
     locks = locks.union(lock_template.mirror("XZ").translate((
         1,
         IntfBoard.H,
@@ -411,14 +436,18 @@ class FrontPanel:
         IntfBoard.H - BOARD_LOCK_W,
         0,
     )))
-    lock_template = lock_template.translate((0,0, T_BOARD - GENERIC_GAP))
+    lock_tall = INTF_BOARD_FRONT_GAP
+    lock_template = (
+        make_board_lock(lock_tall)
+        .mirror("XY")
+    )
     locks = locks.union(lock_template.rotate((0,0,0),(0,0,1),-90).translate((
-        IntfBoard.OLED.x - GENERIC_GAP,
+        IntfBoard.OLED.x,
         IntfBoard.OLED.y + SSD1906.H,
         0,
     )))
     locks = locks.union(lock_template.rotate((0,0,0),(0,0,1),90).translate((
-        IntfBoard.OLED.x + SSD1906.W + GENERIC_GAP,
+        IntfBoard.OLED.x + SSD1906.W,
         IntfBoard.OLED.y + SSD1906.H - BOARD_LOCK_W,
         0,
     )))
@@ -430,7 +459,7 @@ class FrontPanel:
     support = (
         make_board_supporter(support_w, support_h, MAIN_BOARD_FRONT_GAP)
         .mirror("XY")
-        .translate((MAIN_BOARD_OFFSET[0], MAIN_BOARD_OFFSET[1], 0))
+        .translate((MAIN_BOARD_3D_OFFSET[0], MAIN_BOARD_3D_OFFSET[1], 0))
     )
     solid = solid.union(support.translate((
         0, 
@@ -443,7 +472,7 @@ class FrontPanel:
     support = (
         make_board_supporter(support_w, support_h,MAIN_BOARD_FRONT_GAP)
         .mirror("XY")
-        .translate((MAIN_BOARD_OFFSET[0], MAIN_BOARD_OFFSET[1], 0))
+        .translate((MAIN_BOARD_3D_OFFSET[0], MAIN_BOARD_3D_OFFSET[1], 0))
     )
     solid = solid.union(support.translate((
         0, 
@@ -456,13 +485,46 @@ class FrontPanel:
     support = (
         make_board_supporter(support_w, support_h,MAIN_BOARD_FRONT_GAP)
         .mirror("XY")
-        .translate((MAIN_BOARD_OFFSET[0], MAIN_BOARD_OFFSET[1], 0))
+        .translate((MAIN_BOARD_3D_OFFSET[0], MAIN_BOARD_3D_OFFSET[1], 0))
     )
     solid = solid.union(support.translate((
         0, 
         MainBoard.H - support_h, 
         0,
     )))
+    
+    support_w = 2
+    support_h = 10
+    support_tall = MAIN_BOARD_FRONT_GAP
+    support_extra_tall = support_tall+ 2
+    support_flange=3
+    verts = [
+        (0,0),
+        (0,support_tall-1-support_w*3/2),
+        (support_w,support_tall-1),
+        (support_w,support_tall),
+        (0,support_tall),
+        (0,support_extra_tall),
+        (-support_w,support_extra_tall),
+        (-support_w,0),
+    ]
+    support = (
+        cq.Workplane("XZ")
+        .polyline(verts)
+        .close()
+        .extrude(-support_h)
+    )
+    support = support.union(
+        cq.Workplane("XY")
+        .box(support_flange, support_w, support_extra_tall, centered=False)
+        .translate((-support_w-support_flange, 0, 0))
+    )
+    support = (
+        support.rotate((0,0,0),(0,1,0),180)
+        .translate(MAIN_BOARD_2D_OFFSET)
+        .translate((MainBoard.W, 0, 0))
+    )
+    solid = solid.union(support)
     
     T_DC_JACK_WALL = T_PANEL
     dcjack_wall = (
@@ -471,7 +533,7 @@ class FrontPanel:
     )
     verts = [
         (0,0),
-        (DC_JACK_MOUNT_H, 0),
+        (DC_JACK_MOUNT_H/2, 0),
         (0, DC_JACK_MOUNT_H * 2 / 3),
     ]
     wall_support = (
@@ -486,6 +548,11 @@ class FrontPanel:
     dcjack_wall = (
         dcjack_wall.edges(">>Z and |Y")
         .chamfer(5)
+    )
+    dcjack_wall = dcjack_wall.cut(
+        cq.Workplane("XY")
+        .box(MJ_10A.SCREW_DIAMETER / 2, 99, 99, centered=(True, False, False))
+        .translate((0, 0, DC_JACK_MOUNT_H/2))
     )
     solid = solid.union(
         dcjack_wall.translate((0,0, -DC_JACK_MOUNT_H/2))
@@ -522,7 +589,7 @@ class FrontPanel:
     cutter = (
         cq.Workplane("XY")
         .box(
-            CASE_LOCK_DEPTH*2 + GENERIC_GAP,
+            CASE_LOCK_DEPTH * 2 + GENERIC_GAP,
             CASE_LOCK_W + GENERIC_GAP,
             CASE_LOCK_H + GENERIC_GAP,
         )
@@ -552,7 +619,7 @@ show_object(
 show_object(
     cq.Workplane("XY")
     .box(MainBoard.W, MainBoard.H, T_BOARD, centered=False)
-    .translate(MAIN_BOARD_OFFSET),
+    .translate(MAIN_BOARD_3D_OFFSET),
     options={"color": "#fc8"}
 )
 
