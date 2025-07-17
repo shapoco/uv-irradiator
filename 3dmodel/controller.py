@@ -8,22 +8,99 @@ GENERIC_CHAMFER = 0.5
 
 T_BOARD = 1
 
-class TactileSwitch:
-    W = 6.2
-    H = 6.2
-    T_BODY= 4
-    T_TOTAL = 5.1
+class TactSw:
+    BODY_W = 6.2
+    BODY_H = 6.2
+    BODY_T= 4
+    TOTAL_T = 5.1
+    BUTTON_D = 3.5
     
     def __init__(self, x, y):
         self.x = x
         self.y = y
 
-class SwitchKey:
-    def __init__(self, sw : TactileSwitch,  w, h, z_gap):
+class SwKey:
+    TOP_T = 4
+    FLANGE_T = 1
+    FLANGE_W = 1
+    ENGRAVE_DEPTH = 0.75
+    
+    def __init__(self, sw : TactSw,  w, h, z_gap, text):
         self.w = w
         self.h = h
         self.z_gap = z_gap
         self.sw = sw
+        self.text = text
+
+        # キートップ原型
+        solid = (
+            cq.Workplane("XY")
+            .box(self.w, self.h, SwKey.TOP_T, centered=(True, True, False))
+        )
+        
+        # キートップを斜めにカット
+        verts = [
+            (-99, 0),
+            (0, 0),
+            (0.5, SwKey.TOP_T),
+            (99, SwKey.TOP_T),
+            (99, SwKey.TOP_T+1),
+            (-99, SwKey.TOP_T +1),
+        ]
+        cutter = (
+            cq.Workplane("XZ")
+            .polyline(verts)
+            .close()
+            .extrude(99, both=True)
+        )
+        solid = solid.cut(cutter.translate((-self.w / 2, 0, 0)))
+        solid = solid.cut(cutter.mirror("YZ").translate((self.w / 2, 0, 0)))
+        cutter = cutter.rotate((0, 0, 0), (0, 0, 1), 90)
+        solid = solid.cut(cutter.translate((0, -self.h / 2, 0)))
+        solid = solid.cut(cutter.mirror("XZ").translate((0, self.h / 2, 0)))
+        
+        # 面取り
+        solid = (
+            solid
+            .edges("not <<Z")
+            .fillet(GENERIC_CHAMFER)
+            .faces(">Z")
+            .workplane(origin=(0,0,0))
+            .text(self.text, 4.5, -SwKey.ENGRAVE_DEPTH, kind="bold", halign="center", valign="center")
+        )
+        
+        # フランジの追加
+        solid = solid.union(
+            cq.Workplane("XY")
+            .box(self.w + SwKey.FLANGE_W * 2, self.h + SwKey.FLANGE_W * 2, SwKey.FLANGE_T, centered=(True, True, False))
+            .translate((0, 0, -SwKey.FLANGE_T))
+        )
+        
+        # 裏側の彫り込み
+        solid = solid.cut(
+            cq.Workplane("XY")
+            .box(
+                TactSw.BODY_W + GENERIC_GAP,
+                TactSw.BODY_H + GENERIC_GAP,
+                TactSw.TOTAL_T + GENERIC_GAP - 0.5,
+                centered=(True, True, False),
+            )
+            .translate((0, 0, -self.z_gap))
+        )
+        
+        # ボタンの軸がはまる穴
+        solid = solid.cut(
+            cq.Workplane("XY")
+            .cylinder(
+                TactSw.TOTAL_T + GENERIC_GAP + NARROW_GAP, 
+                TactSw.BUTTON_D / 2 + GENERIC_GAP,
+                centered=(True, True, False),
+            )
+            .translate((0, 0, -self.z_gap))
+        )
+        
+        self.solid = solid.translate((sw.x, sw.y, 0))
+        
     
     def modify_panel(self, panel, offset):
         cutter = (
@@ -108,13 +185,21 @@ class Indicator():
     
 class SidePinHeader:
     L_PIN = 7
+    W_PIN = 0.75
 
-    def __init__(self, num_pin_w, num_pin_h, horizontal_offset):
+    def __init__(self, num_pin_w, num_pin_h, offset):
         self.num_pin_w = num_pin_w
         self.num_pin_h = num_pin_h
-        self.horizontal_offset = horizontal_offset
+        self.offset = offset
         self.w = (num_pin_w + 1) * MIL100
         self.h = (num_pin_h + 1) * MIL100
+        self.cutter = (
+            cq.Workplane("XY")
+            .box(self.h, 20, self.w, centered=(False, False, False))
+            .translate((-MIL100, 0, -0.5 * MIL100 + SidePinHeader.W_PIN / 2))
+            .translate(self.offset)
+        )
+
 
 class SSD1906:
     W = 27.35
@@ -150,28 +235,48 @@ class SSD1906:
 
 class RasPico:
     T_BOARD = 1
+    W = 21.5
+    L = 51.5
+    
+    W_CONN = 7.6
+    L_CONN = 4
+    T_CONN = 2.5
+    
+    SOLID_TEMPLATE = (
+        cq.Workplane("XY")
+        .box(W, L, T_BOARD, centered=(True, False, False))
+    )
+    SOLID_TEMPLATE = SOLID_TEMPLATE.union(
+        cq.Workplane("XY")
+        .box(W_CONN, L_CONN, T_CONN, centered=(True, False, False))
+        .translate((0, 0, T_BOARD))
+    )
 
 class MainBoard:
     W = 22 * MIL100
     H = 18 * MIL100
     
     T_FRONT = 14
-    T_BACK = 3
+    T_BACK = 2
     
-    CN1 = SidePinHeader(2, 8, 2 * MIL100)
-    CN2 = SidePinHeader(1, 2, 11 * MIL100)
+    CN1 = SidePinHeader(2, 8, (2 * MIL100, H, 0))
+    CN2 = SidePinHeader(1, 2, (11 * MIL100, H, 0))
     
     T_TOTAL = T_BOARD + T_FRONT + T_BACK
     H_INCLUDE_PINS = H + CN1.L_PIN
 
 class Volume:
     BODY_DIAMETER = 17
-    BODY_THICKNESS = 15.1
+    BODY_THICKNESS_INCLUDING_SW_PINS = 15.1
         
     # 軸の中心から中央のピンの先端までの距離
     PIN_RADIUS = 16
     
     SHAFT_HOLE_DIAMETER = 7
+    
+    SHAFT_D = 6
+    SHAFT_L = 20
+    
     LOCK_HOLE_W = 1.5
     LOCK_HOLE_H = 3
     LOCK_HOLE_X_OFFSET = 7.8
@@ -180,12 +285,19 @@ class Volume:
         self.x = x
         self.y = y
         self.angle = angle
-        self.solid = (
+        solid = (
             cq.Workplane("XY")
-            .cylinder(Volume.BODY_THICKNESS, Volume.BODY_DIAMETER / 2, centered=(True, True, False))
-            .rotate((0, 0, 0), (0, 0, 1), self.angle)
-            .translate((x, y, -Volume.BODY_THICKNESS))
+            .cylinder(Volume.BODY_THICKNESS_INCLUDING_SW_PINS, Volume.BODY_DIAMETER / 2, centered=(True, True, False))
+            .translate((x, y, -Volume.BODY_THICKNESS_INCLUDING_SW_PINS))
         )
+        solid = solid.union(
+            cq.Workplane("XY")
+            .cylinder(Volume.SHAFT_L, Volume.SHAFT_D / 2, centered=(True, True, False))
+            .faces(">Z")
+            .chamfer(GENERIC_CHAMFER)
+            .translate((x, y, 0))
+        )
+        self.solid = solid
         
     def modify_panel(self, panel, offset):
         cutter = (
@@ -212,7 +324,7 @@ class Volume:
 
 class MJ_10A:
     SCREW_DIAMETER = 12.5
-    FRONT_DIAMETER = 17
+    FRONT_DIAMETER = 16
     CUTTER_LENGTH = 20
     
     def __init__(self, offset=(0, 0, 0)):
@@ -248,9 +360,9 @@ class IntfBoard:
     LED1 = LED(2.5 * MIL100, 3 * MIL100 -3)
     LED2 = LED(LED1.x, 3 * MIL100 + 3)
 
-    SW1 = TactileSwitch(7.5 * MIL100, 3 * MIL100)
-    SW2 = TactileSwitch(SW1.x + SW_INTERVAL, SW1.y)
-    SW3 = TactileSwitch(SW2.x + SW_INTERVAL, SW1.y)
+    SW1 = TactSw(7.5 * MIL100, 3 * MIL100)
+    SW2 = TactSw(SW1.x + SW_INTERVAL, SW1.y)
+    SW3 = TactSw(SW2.x + SW_INTERVAL, SW1.y)
 
     OLED = SSD1906(25.7, 15.9)
 
@@ -265,7 +377,7 @@ INTF_BOARD_3D_OFFSET = (INTF_BOARD_2D_OFFSET[0], INTF_BOARD_2D_OFFSET[1], -INTF_
 MAIN_BOARD_FRONT_GAP = INTF_BOARD_FRONT_GAP + T_BOARD  + MainBoard.T_FRONT
 MAIN_BOARD_2D_OFFSET = (PANEL_X_MARGIN, PANEL_Y_MARGIN, 0)
 MAIN_BOARD_3D_OFFSET = (MAIN_BOARD_2D_OFFSET[0], MAIN_BOARD_2D_OFFSET[1], -MAIN_BOARD_FRONT_GAP - T_BOARD)
-INNER_HEIGHT = int(math.ceil(-MAIN_BOARD_3D_OFFSET[2] + MainBoard.T_BACK))
+INNER_TALL = int(math.ceil(-MAIN_BOARD_3D_OFFSET[2] + MainBoard.T_BACK))
 
 VOL_MARGIN = 2
 
@@ -290,7 +402,7 @@ print(f"INTF_BOARD_FRONT_GAP: {INTF_BOARD_FRONT_GAP}")
 print(f"MAIN_BOARD_FRONT_GAP: {MAIN_BOARD_FRONT_GAP}")
 print(f"PANEL_W: {PANEL_W}")
 print(f"PANEL_H: {PANEL_H}")
-print(f"INNER_HEIGHT: {INNER_HEIGHT}")
+print(f"INNER_HEIGHT: {INNER_TALL}")
 
 # 裏ブラ固定用穴の寸法
 CASE_LOCK_W = 5
@@ -301,11 +413,20 @@ CASE_LOCK_DEPTH = 0.5
 offset_y = 10 - CASE_LOCK_W/2 
 offset_z  =T_PANEL-H_FLANGE/2
 CASE_LOCK_POINTS = [
-    (0, offset_y, offset_z),
-    (0, PANEL_H-offset_y, offset_z),
-    (PANEL_W, offset_y, offset_z),
-    (PANEL_W, PANEL_H-offset_y, offset_z),
+    ((0, offset_y, offset_z), False),
+    ((0, PANEL_H-offset_y, offset_z), False),
+    ((PANEL_W, offset_y, offset_z), True),
+    ((PANEL_W, PANEL_H-offset_y, offset_z), True),
 ]
+
+# DCジャックの穴の位置
+DC_JACK_HOLE_OFFSET = (PANEL_W - DC_JACK_MOUNT_W/2, PANEL_H -2, -DC_JACK_MOUNT_H/2)
+
+PICO_CONN_HOLE_OFFSET = (
+    0,
+    MAIN_BOARD_3D_OFFSET[1] + 4.5 * MIL100,
+    MAIN_BOARD_3D_OFFSET[2] + T_BOARD + RasPico.T_BOARD + RasPico.T_CONN / 2,
+)
 
 # 基板を押さえつける柱の生成
 def make_board_supporter(w,h , tall):
@@ -351,9 +472,9 @@ class FrontPanel:
     KEY_HEIGHT = 10
     
     # キー
-    KEY1 = SwitchKey(IntfBoard.SW1, KEY_WIDTH, KEY_HEIGHT, INTF_BOARD_FRONT_GAP)
-    KEY2 = SwitchKey(IntfBoard.SW2, KEY_WIDTH, KEY_HEIGHT, INTF_BOARD_FRONT_GAP)
-    KEY3 = SwitchKey(IntfBoard.SW3, KEY_WIDTH, KEY_HEIGHT, INTF_BOARD_FRONT_GAP)
+    KEY1 = SwKey(IntfBoard.SW1, KEY_WIDTH, KEY_HEIGHT, INTF_BOARD_FRONT_GAP, "FN")
+    KEY2 = SwKey(IntfBoard.SW2, KEY_WIDTH, KEY_HEIGHT, INTF_BOARD_FRONT_GAP, "▼")
+    KEY3 = SwKey(IntfBoard.SW3, KEY_WIDTH, KEY_HEIGHT, INTF_BOARD_FRONT_GAP, "OK")
 
     # インジケータ
     IND1 = Indicator(IntfBoard.LED1, 12, 5, T_PANEL, INTF_BOARD_FRONT_GAP, "OUT")
@@ -366,7 +487,6 @@ class FrontPanel:
         180
     )
 
-    DC_JACK_HOLE_OFFSET = (PANEL_W - DC_JACK_MOUNT_W/2, PANEL_H -2, -DC_JACK_MOUNT_H/2)
     DC_JACK = (
         MJ_10A().rotate((0,0,0),(1,0,0),-90)
         .translate(DC_JACK_HOLE_OFFSET)
@@ -594,27 +714,181 @@ class FrontPanel:
             CASE_LOCK_H + GENERIC_GAP,
         )
     )
-    for pos in CASE_LOCK_POINTS:
+    for (pos, is_mirrored) in CASE_LOCK_POINTS:
         solid = solid.cut(cutter.translate(pos))
+
+EXT_W = PANEL_W + T_PANEL * 2
+EXT_H = PANEL_H + T_PANEL * 2
+EXT_TALL = INNER_TALL + T_PANEL * 2
+
+class BackCase:
+    solid = (
+        cq.Workplane("XY")
+        .box(EXT_W, EXT_H, EXT_TALL, centered=False)
+        .translate((-T_PANEL, -T_PANEL, -EXT_TALL + T_PANEL))
+    )
+    solid = solid.cut(
+        cq.Workplane("XY")
+        .box(PANEL_W, PANEL_H, INNER_TALL, centered=False)
+        .translate((0, 0, -INNER_TALL))
+    )
+    solid = solid.cut(
+        cq.Workplane("XY")
+        .box(PANEL_W + NARROW_GAP * 2, PANEL_H + NARROW_GAP * 2, H_FLANGE + NARROW_GAP, centered=False)
+        .translate((-NARROW_GAP, -NARROW_GAP, T_PANEL - H_FLANGE - NARROW_GAP))
+    )
+    
+    # 基板固定
+    holder_w = 3
+    holder_shoulder_tall = INNER_TALL + MAIN_BOARD_3D_OFFSET[2]
+    verts = [
+        (2, 0),
+        (-2, 0),
+        (-2, holder_shoulder_tall + 1),
+        (-1, holder_shoulder_tall + 2),
+        (0, holder_shoulder_tall + 2),
+        (0, holder_shoulder_tall - GENERIC_GAP),
+        (2, holder_shoulder_tall - GENERIC_GAP),
+    ]
+    board_holder = (
+        cq.Workplane("XZ")
+        .polyline(verts)
+        .close()
+        .extrude(holder_w / 2, both=True)
+        .translate((0, 0, -INNER_TALL))
+    )
+    board_holders = board_holder.translate((
+        0,
+        holder_w / 2,
+        0,
+    ))
+    board_holders = board_holders.union(board_holder.translate((
+        0,
+        MainBoard.H - holder_w / 2,
+        0
+    )))
+    board_holders = board_holders.union(board_holder.mirror("YZ").translate((
+        MainBoard.W,
+        12,
+        0
+    )))
+    board_holders = board_holders.union(board_holder.mirror("YZ").translate((
+        MainBoard.W,
+        MainBoard.H - holder_w / 2,
+        0
+    )))
+    solid = solid.union(board_holders.translate(MAIN_BOARD_2D_OFFSET))
+    
+    # ピンヘッダ用の穴
+    solid = solid.cut(
+        MainBoard.CN1.cutter
+        .union(MainBoard.CN2.cutter)
+        .edges("|Y")
+        .fillet(GENERIC_CHAMFER)
+        .translate(MAIN_BOARD_3D_OFFSET)
+    )
+    
+    # DCジャックの穴
+    solid = solid.cut(
+        cq.Workplane("XY")
+        .cylinder(20,MJ_10A.FRONT_DIAMETER/2, direct=(0,1,0))
+        .translate(DC_JACK_HOLE_OFFSET)
+    )
+    
+    # Picoのコネクタの穴
+    solid = solid.cut(
+        cq.Workplane("XY")
+        .box(T_PANEL * 4, 12, 10, centered=(True, True, True))
+        .edges("|X")
+        .fillet(1)
+        .translate(PICO_CONN_HOLE_OFFSET)
+    )
+    
+    # 面取り
+    solid = (
+        solid.faces(">X or <X or >Y or <Y or >Z or <Z")
+        .chamfer(GENERIC_CHAMFER)
+    )
+    
+    # フロントパネル固定用の爪
+    for (pos, is_mirrored) in CASE_LOCK_POINTS:
+        notch = (
+            cq.Workplane("XY")
+            .box(
+                CASE_LOCK_DEPTH * 2,
+                CASE_LOCK_W,
+                CASE_LOCK_H,
+            )
+            .edges(">>X and >>Z")
+            .chamfer(CASE_LOCK_DEPTH + NARROW_GAP)
+        )
+        if is_mirrored:
+            notch = notch.mirror("YZ")
+        solid = solid.union(
+            notch.translate(pos)
+        )
 
 front_panel = FrontPanel.solid
 plate_out = FrontPanel.IND1.make_plate()
 plate_err = FrontPanel.IND2.make_plate()
+sw_key1 = FrontPanel.KEY1.solid
+sw_key2 = FrontPanel.KEY2.solid
+sw_key3 = FrontPanel.KEY3.solid
+
+back_case = BackCase.solid
+
+
+if False:
+    cutter = (
+        cq.Workplane("XY")
+        .box(
+            EXT_W + T_PANEL * 2,
+            (INTF_BOARD_2D_OFFSET[1] + IntfBoard.SW1.y) * 2 - 4,
+            99,
+            centered=(False, True, True)
+        )
+        .translate((-T_PANEL * 2, 0, 0))
+    )
+    if True:
+        front_panel = front_panel.cut(cutter)
+        back_case = back_case.cut(cutter)
+        sw_key1 = sw_key1.cut(cutter)
+    else:
+        front_panel = front_panel.intersect(cutter)
+        back_case = back_case.intersect(cutter)
+        sw_key1 = sw_key1.intersect(cutter)
 
 plate_z_offset = T_PANEL - Indicator.T_PLATE
-show_object(front_panel)
+show_object(front_panel, options={"color": "#ccc"})
+
 show_object(
     plate_out.translate(INTF_BOARD_2D_OFFSET)
     .translate((
         IntfBoard.LED1.x, IntfBoard.LED1.y, plate_z_offset,
     )),
-    options={"color": "#08f"})
+    options={"color": "#08f"}
+)
 show_object(
     plate_err.translate(INTF_BOARD_2D_OFFSET)
     .translate((
         IntfBoard.LED2.x, IntfBoard.LED2.y, plate_z_offset,
     )),
-    options={"color": "#f00"})
+    options={"color": "#f00"}
+)
+
+show_object(
+    sw_key1.translate(INTF_BOARD_2D_OFFSET),
+    options={"color": "#222"}
+)
+show_object(
+    sw_key2.translate(INTF_BOARD_2D_OFFSET),
+    options={"color": "#222"}
+)
+show_object(
+    sw_key3.translate(INTF_BOARD_2D_OFFSET),
+    options={"color": "#222"}
+)
+
 
 show_object(
     cq.Workplane("XY")
@@ -646,10 +920,22 @@ show_object(
 )
 show_object(FrontPanel.VR1.solid,options={"color": "#ccc"})
 
+show_object(RasPico.SOLID_TEMPLATE.rotate((0,0,0),(0,0,1),-90).translate((
+    MAIN_BOARD_3D_OFFSET[0],
+    MAIN_BOARD_3D_OFFSET[1] + 4.5 * MIL100,
+    MAIN_BOARD_3D_OFFSET[2] + T_BOARD,   
+)),options={"color": "#0f0"})
+
+show_object(back_case, options={"color": "#111"})
+
 front_panel = front_panel.rotate((0,0,0),(1,0,0),180)
 front_panel.export("front_panel.step")
 plate_out.export("plate_out.step")
 plate_err.export("plate_err.step")
+sw_key1.export("sw_key1.step")
+sw_key2.export("sw_key2.step")
+sw_key3.export("sw_key3.step")
+back_case.export("back_case.step")
 
 
 if False:
