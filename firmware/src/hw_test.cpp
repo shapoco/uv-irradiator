@@ -4,14 +4,9 @@
 #include <hardware/pwm.h>
 #include <pico/stdlib.h>
 
-#include "LovyanGFX.hpp"
-
 #include "uv_irradiator/hw_test.hpp"
-#include "uv_irradiator/lgfx_ssd1306.hpp"
 
 namespace uv_irradiator {
-
-LGFX_SSD1306 display;
 
 static float adc_read_average(int channel, int num_samples) {
   adc_select_input(channel);
@@ -45,12 +40,12 @@ void hw_test_main(void) {
   }
 
   // インジケータ初期化
-  gpio_init(FAULT_LED_PORT);
-  gpio_init(UNLOCK_LED_PORT);
-  gpio_set_dir(FAULT_LED_PORT, GPIO_OUT);
-  gpio_set_dir(UNLOCK_LED_PORT, GPIO_OUT);
-  gpio_put(FAULT_LED_PORT, true);
-  gpio_put(UNLOCK_LED_PORT, true);
+  gpio_init(ERR_LED_PORT);
+  gpio_init(OUT_LED_PORT);
+  gpio_set_dir(ERR_LED_PORT, GPIO_OUT);
+  gpio_set_dir(OUT_LED_PORT, GPIO_OUT);
+  gpio_put(ERR_LED_PORT, true);
+  gpio_put(OUT_LED_PORT, true);
 
   // スイッチ類の初期化
   for (int i = 0; i < SWITCH_NUM_PORTS; i++) {
@@ -160,8 +155,8 @@ void hw_test_main(void) {
 
     {
       int t = now_ms / 1024;
-      gpio_put(UNLOCK_LED_PORT, !!(t & 1));
-      gpio_put(FAULT_LED_PORT, !!(t & 2));
+      gpio_put(OUT_LED_PORT, !!(t & 1));
+      gpio_put(ERR_LED_PORT, !!(t & 2));
     }
 
     display.setTextColor(Color::WHITE, Color::BLACK);
