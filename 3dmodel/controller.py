@@ -928,14 +928,15 @@ show_object(RasPico.SOLID_TEMPLATE.rotate((0,0,0),(0,0,1),-90).translate((
 
 show_object(back_case, options={"color": "#111"})
 
+step_dir = "step"
 front_panel = front_panel.rotate((0,0,0),(1,0,0),180)
-front_panel.export("front_panel.step")
-plate_out.export("plate_out.step")
-plate_err.export("plate_err.step")
-sw_key1.export("sw_key1.step")
-sw_key2.export("sw_key2.step")
-sw_key3.export("sw_key3.step")
-back_case.export("back_case.step")
+front_panel.export(f"{step_dir}/front_panel.step")
+plate_out.export(f"{step_dir}/plate_out.step")
+plate_err.export(f"{step_dir}/plate_err.step")
+sw_key1.export(f"{step_dir}/sw_key1.step")
+sw_key2.export(f"{step_dir}/sw_key2.step")
+sw_key3.export(f"{step_dir}/sw_key3.step")
+back_case.export(f"{step_dir}/back_case.step")
 
 
 if False:
