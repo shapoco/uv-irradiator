@@ -8414,6 +8414,16 @@
 		)
 		(uuid "6ecafc82-2d5e-4292-99eb-a38436e04600")
 	)
+	(label "VUVLED"
+		(at 200.66 30.48 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left bottom)
+		)
+		(uuid "76ab5c88-b0d7-4ef8-bcd1-0389c29cd32b")
+	)
 	(label "APOT"
 		(at 121.92 119.38 0)
 		(effects
